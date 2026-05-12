@@ -1,11 +1,14 @@
+
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { X } from 'lucide-react'
-import { Prompt, Tag, PromptFormData, createPrompt, updatePrompt } from '@/api'
+import { useApi } from '@/hooks/useApi'
+import type { Prompt, Tag, PromptFormData } from '@/api'
 
 interface PromptFormProps {
   isOpen: boolean
@@ -27,6 +30,7 @@ export default function PromptForm({
     scenario: '',
     content: '',
     variables: '',
+    is_public: false,
     tag_ids: [],
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -34,6 +38,7 @@ export default function PromptForm({
   const [newTagInput, setNewTagInput] = useState('')
   const [newTags, setNewTags] = useState<string[]>([])
   const tagInputRef = useRef<HTMLInputElement>(null)
+  const { createPrompt, updatePrompt } = useApi()
 
   useEffect(() => {
     if (prompt) {
@@ -42,6 +47,7 @@ export default function PromptForm({
         scenario: prompt.scenario || '',
         content: prompt.content,
         variables: prompt.variables || '',
+        is_public: prompt.is_public,
         tag_ids: prompt.tags.map((t) => t.id),
       })
     } else {
@@ -50,6 +56,7 @@ export default function PromptForm({
         scenario: '',
         content: '',
         variables: '',
+        is_public: false,
         tag_ids: [],
       })
     }
@@ -166,6 +173,16 @@ export default function PromptForm({
               placeholder='请输入适用场景'
             />
           </div>
+          <div className='flex items-center gap-2 space-y-0'>
+            <Checkbox
+              id='is_public'
+              checked={formData.is_public}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({ ...prev, is_public: checked === true }))
+              }
+            />
+            <Label htmlFor='is_public' className='cursor-pointer'>公开到团队</Label>
+          </div>
           <div className='space-y-2'>
             <Label>标签</Label>
             <div className='flex flex-wrap gap-2'>
@@ -253,3 +270,4 @@ export default function PromptForm({
     </div>
   )
 }
+

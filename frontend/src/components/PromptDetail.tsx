@@ -1,8 +1,10 @@
+
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -10,9 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { X, Copy, Edit, Trash2 } from 'lucide-react'
-import { PromptDetail as PromptDetailData, getPrompt } from '@/api'
+import { X, Copy, Edit, Trash2, Globe, Lock, User } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
+import { useApi } from '@/hooks/useApi'
+import type { PromptDetail as PromptDetailType } from '@/api'
 import {
   Dialog,
   DialogContent,
@@ -37,7 +40,7 @@ export default function PromptDetail({
   onDelete,
   promptId,
 }: PromptDetailProps) {
-  const [prompt, setPrompt] = useState<PromptDetailData | null>(null)
+  const [prompt, setPrompt] = useState<PromptDetailType | null>(null)
   const [loading, setLoading] = useState(false)
   const [currentVersion, setCurrentVersion] = useState<string>('')
   const [variableValues, setVariableValues] = useState<Record<string, string>>(
@@ -45,6 +48,7 @@ export default function PromptDetail({
   )
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { addToast } = useToast()
+  const { getPrompt } = useApi()
 
   const extractVariables = useCallback((content: string): string[] => {
     const variables = new Set<string>()
@@ -77,7 +81,7 @@ export default function PromptDetail({
 
   useEffect(() => {
     if (promptId && isOpen) {
-      const fetchPrompt = async () => {
+      const fetchPromptData = async () => {
         setLoading(true)
         try {
           const data = await getPrompt(promptId)
@@ -90,9 +94,9 @@ export default function PromptDetail({
           setLoading(false)
         }
       }
-      fetchPrompt()
+      fetchPromptData()
     }
-  }, [promptId, isOpen])
+  }, [promptId, isOpen, getPrompt])
 
   useEffect(() => {
     const newVariables = extractVariables(getCurrentContent())
@@ -147,7 +151,22 @@ export default function PromptDetail({
       <div className='bg-background rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] flex flex-col'>
         <div className='flex items-center justify-between p-6 border-b'>
           <div className='flex items-center gap-4'>
-            <h2 className='text-xl font-semibold'>{prompt?.title || ''}</h2>
+            <div>
+              <h2 className='text-xl font-semibold flex items-center gap-2'>
+                {prompt?.title || ''}
+                {prompt?.is_public ? (
+                  <Globe className='h-4 w-4 text-muted-foreground' />
+                ) : (
+                  <Lock className='h-4 w-4 text-muted-foreground' />
+                )}
+              </h2>
+              {prompt?.owner_username && (
+                <p className='text-sm text-muted-foreground mt-1 flex items-center gap-1'>
+                  <User className='h-3.5 w-3.5' />
+                  创建者：{prompt.owner_username}
+                </p>
+              )}
+            </div>
             <Button variant='outline' size='sm' onClick={onEdit}>
               <Edit className='h-4 w-4 mr-2' />
               编辑
@@ -246,12 +265,11 @@ export default function PromptDetail({
               {prompt?.tags && prompt.tags.length > 0 && (
                 <div className='flex flex-wrap gap-2'>
                   {prompt.tags.map((tag) => (
-                    <span
+                    <Badge
                       key={tag.id}
-                      className='inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium'
                     >
                       {tag.name}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               )}
@@ -288,3 +306,4 @@ export default function PromptDetail({
     </div>
   )
 }
+

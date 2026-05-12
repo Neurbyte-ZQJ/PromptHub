@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Trash2 } from 'lucide-react'
+import { Trash2, User } from 'lucide-react'
 import { Prompt } from '@/api'
 
 interface PromptCardProps {
@@ -20,7 +20,20 @@ export default function PromptCard({ prompt, onDelete }: PromptCardProps) {
         <Trash2 className="h-4 w-4" />
       </Button>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg pr-8">{prompt.title}</CardTitle>
+        <div className="flex items-center gap-2 pr-8">
+          <CardTitle className="text-lg">{prompt.title}</CardTitle>
+          {prompt.owner_username && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal">
+              <User className="h-3 w-3" />
+              {prompt.owner_username}
+            </span>
+          )}
+          {prompt.is_public && (
+            <span className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+              公开
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground line-clamp-3">

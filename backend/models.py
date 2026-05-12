@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Table, Column
+from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Table, Column, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql import func
 
 from .database import Base
@@ -15,6 +16,18 @@ prompt_tag_association = Table(
 )
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    prompts: Mapped[List["Prompt"]] = relationship(back_populates="owner", lazy="selectin")
+
+
 class Prompt(Base):
     __tablename__ = "prompts"
 
@@ -23,8 +36,16 @@ class Prompt(Base):
     scenario: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     variables: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now())
+
+    owner: Mapped[Optional["User"]] = relationship(back_populates="prompts")
+
+    @hybrid_property
+    def owner_username(self) -> Optional[str]:
+        return self.owner.username if self.owner else None
 
     tags: Mapped[List["Tag"]] = relationship(
         secondary=prompt_tag_association,

@@ -1,12 +1,15 @@
+
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, LogOut, User } from 'lucide-react'
 import Sidebar from './Sidebar'
 import PromptCard from './PromptCard'
 import PromptForm from './PromptForm'
 import PromptDetail from './PromptDetail'
-import { getPrompts, getTags, deletePrompt, Prompt, Tag } from '@/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { useApi } from '@/hooks/useApi'
+import type { Prompt, Tag } from '@/api'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +30,8 @@ export default function Layout() {
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null)
   const [detailPromptId, setDetailPromptId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null)
+  const { user, logout } = useAuth()
+  const { getPrompts, getTags, deletePrompt } = useApi()
 
   const fetchData = async () => {
     try {
@@ -45,7 +50,7 @@ export default function Layout() {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [getPrompts, getTags])
 
   const filteredPrompts = prompts.filter((prompt) => {
     const matchesTag = selectedTagId === null 
@@ -120,20 +125,32 @@ export default function Layout() {
         onTagSelect={setSelectedTagId}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="p-6 border-b flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="搜索提示词..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        <header className="p-6 border-b flex items-center gap-4 justify-between">
+          <div className="flex items-center gap-4 flex-1">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="搜索提示词..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleOpenCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              新建提示词
+            </Button>
           </div>
-          <Button onClick={handleOpenCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            新建提示词
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <User className="h-4 w-4" />
+              <span>{user?.username}</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={logout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              退出登录
+            </Button>
+          </div>
         </header>
         <div className="flex-1 overflow-auto p-6">
           {loading ? (
@@ -192,3 +209,4 @@ export default function Layout() {
     </div>
   )
 }
+

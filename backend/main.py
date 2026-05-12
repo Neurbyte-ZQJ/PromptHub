@@ -1,16 +1,27 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 
 from .database import get_db, engine, Base
-from .models import Prompt, Tag, PromptVersion, prompt_tag_association
+from .models import Prompt, Tag, PromptVersion, User, prompt_tag_association
 from .schemas import (
     PromptCreate,
     PromptUpdate,
     PromptListItem,
     PromptResponse,
     TagResponse,
+    UserCreate,
+    LoginRequest,
+    UserResponse,
+    Token,
+)
+from .auth import (
+    verify_password,
+    get_password_hash,
+    create_access_token,
+    get_current_user,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -30,8 +41,49 @@ app.add_middleware(
 )
 
 
+@app.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.username == user_data.username).first():
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(status_code=400, detail="邮箱已被注册")
+
+    db_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=get_password_hash(user_data.password),
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@app.post("/api/auth/login", response_model=Token)
+def login(user_data: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_data.email).first()
+    if not user or not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="邮箱或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+def read_current_user(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
 @app.post("/api/prompts", response_model=PromptResponse)
-def create_prompt(prompt_data: PromptCreate, db: Session = Depends(get_db)):
+def create_prompt(
+    prompt_data: PromptCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     tag_ids = list(prompt_data.tag_ids)
     prompt_dict = prompt_data.model_dump(exclude={"tag_ids", "new_tags"})
 
@@ -46,7 +98,7 @@ def create_prompt(prompt_data: PromptCreate, db: Session = Depends(get_db)):
             db.flush()
             tag_ids.append(new_tag.id)
 
-    db_prompt = Prompt(**prompt_dict)
+    db_prompt = Prompt(**prompt_dict, user_id=current_user.id)
 
     if tag_ids:
         tags = db.query(Tag).filter(Tag.id.in_(tag_ids)).all()
@@ -71,8 +123,11 @@ def list_prompts(
     search: Optional[str] = Query(None, description="按标题或内容搜索"),
     tag_id: Optional[int] = Query(None, description="按标签ID筛选"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Prompt)
+    query = db.query(Prompt).filter(
+        or_(Prompt.user_id == current_user.id, Prompt.is_public == True)
+    )
 
     if search:
         pattern = f"%{search}%"
@@ -89,10 +144,16 @@ def list_prompts(
 
 
 @app.get("/api/prompts/{prompt_id}", response_model=PromptResponse)
-def get_prompt(prompt_id: int, db: Session = Depends(get_db)):
+def get_prompt(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
     if not prompt:
         raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id and not prompt.is_public:
+        raise HTTPException(status_code=403, detail="无权访问该提示词")
     return prompt
 
 
@@ -101,10 +162,13 @@ def update_prompt(
     prompt_id: int,
     prompt_data: PromptUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
     if not prompt:
         raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权修改该提示词")
 
     update_dict = prompt_data.model_dump(exclude_unset=True)
     tag_ids = update_dict.pop("tag_ids", None)
@@ -153,10 +217,16 @@ def update_prompt(
 
 
 @app.delete("/api/prompts/{prompt_id}")
-def delete_prompt(prompt_id: int, db: Session = Depends(get_db)):
+def delete_prompt(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
     if not prompt:
         raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权删除该提示词")
 
     db.delete(prompt)
     db.commit()
