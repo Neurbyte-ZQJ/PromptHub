@@ -8,13 +8,26 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { X } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
-import type { Prompt, Tag, PromptFormData } from '@/api'
+import type { Prompt, Tag, Category, PromptFormData } from '@/api'
+
+// 将树形分类扁平化为带缩进前缀的列表
+function flattenCategories(categories: Category[], depth = 0): { id: number; name: string; depth: number }[] {
+  const result: { id: number; name: string; depth: number }[] = []
+  for (const cat of categories) {
+    result.push({ id: cat.id, name: cat.name, depth })
+    if (cat.children && cat.children.length > 0) {
+      result.push(...flattenCategories(cat.children, depth + 1))
+    }
+  }
+  return result
+}
 
 interface PromptFormProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
   tags: Tag[]
+  categories: Category[]
   prompt?: Prompt | null
 }
 
@@ -23,6 +36,7 @@ export default function PromptForm({
   onClose,
   onSuccess,
   tags,
+  categories,
   prompt,
 }: PromptFormProps) {
   const [formData, setFormData] = useState<PromptFormData>({
@@ -31,6 +45,7 @@ export default function PromptForm({
     content: '',
     variables: '',
     is_public: false,
+    category_ids: [],
     tag_ids: [],
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -48,6 +63,7 @@ export default function PromptForm({
         content: prompt.content,
         variables: prompt.variables || '',
         is_public: prompt.is_public,
+        category_ids: prompt.categories.map((c) => c.id),
         tag_ids: prompt.tags.map((t) => t.id),
       })
     } else {
@@ -57,6 +73,7 @@ export default function PromptForm({
         content: '',
         variables: '',
         is_public: false,
+        category_ids: [],
         tag_ids: [],
       })
     }
@@ -99,6 +116,15 @@ export default function PromptForm({
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const toggleCategory = (catId: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      category_ids: prev.category_ids.includes(catId)
+        ? prev.category_ids.filter((id) => id !== catId)
+        : [...prev.category_ids, catId],
+    }))
   }
 
   const toggleTag = (tagId: number) => {
@@ -172,6 +198,24 @@ export default function PromptForm({
               }
               placeholder='请输入适用场景'
             />
+          </div>
+          <div className='space-y-2'>
+            <Label>所属分类</Label>
+            <div className='flex flex-wrap gap-2'>
+              {flattenCategories(categories).map((cat) => (
+                <Badge
+                  key={cat.id}
+                  variant={formData.category_ids.includes(cat.id) ? 'default' : 'outline'}
+                  className='cursor-pointer'
+                  onClick={() => toggleCategory(cat.id)}
+                >
+                  {'　'.repeat(cat.depth)}{cat.name}
+                </Badge>
+              ))}
+              {formData.category_ids.length === 0 && (
+                <span className='text-sm text-muted-foreground'>未分类</span>
+              )}
+            </div>
           </div>
           <div className='flex items-center gap-2 space-y-0'>
             <Checkbox

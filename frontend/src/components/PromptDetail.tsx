@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { X, Copy, Edit, Trash2, Globe, Lock, User } from 'lucide-react'
+import { X, Copy, Edit, Trash2, Globe, Lock, User, Heart, Folder } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { useApi } from '@/hooks/useApi'
 import type { PromptDetail as PromptDetailType } from '@/api'
@@ -30,7 +30,9 @@ interface PromptDetailProps {
   onClose: () => void
   onEdit: () => void
   onDelete: (id: number) => void
+  onToggleFavorite: (id: number) => void
   promptId: number | null
+  externalFavoriteState?: { is_favorited: boolean; favorite_count: number }
 }
 
 export default function PromptDetail({
@@ -38,7 +40,9 @@ export default function PromptDetail({
   onClose,
   onEdit,
   onDelete,
+  onToggleFavorite,
   promptId,
+  externalFavoriteState,
 }: PromptDetailProps) {
   const [prompt, setPrompt] = useState<PromptDetailType | null>(null)
   const [loading, setLoading] = useState(false)
@@ -109,6 +113,16 @@ export default function PromptDetail({
     })
   }, [currentVersion, prompt, extractVariables, getCurrentContent])
 
+  useEffect(() => {
+    if (externalFavoriteState && prompt) {
+      setPrompt((prev) =>
+        prev
+          ? { ...prev, is_favorited: externalFavoriteState.is_favorited, favorite_count: externalFavoriteState.favorite_count }
+          : prev
+      )
+    }
+  }, [externalFavoriteState])
+
   const handleVariableChange = (variable: string, value: string) => {
     setVariableValues((prev) => ({ ...prev, [variable]: value }))
   }
@@ -170,6 +184,18 @@ export default function PromptDetail({
             <Button variant='outline' size='sm' onClick={onEdit}>
               <Edit className='h-4 w-4 mr-2' />
               编辑
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => prompt && onToggleFavorite(prompt.id)}
+              className={prompt?.is_favorited ? 'text-red-500 border-red-200 hover:bg-red-50' : ''}
+            >
+              <Heart className={`h-4 w-4 mr-2 ${prompt?.is_favorited ? 'fill-current' : ''}`} />
+              {prompt?.is_favorited ? '已收藏' : '收藏'}
+              {prompt && prompt.favorite_count > 0 && (
+                <span className='ml-1'>({prompt.favorite_count})</span>
+              )}
             </Button>
             <Button variant='outline' size='sm' onClick={() => setShowDeleteConfirm(true)} className='text-destructive hover:bg-destructive hover:text-white'>
               <Trash2 className='h-4 w-4 mr-2' />
@@ -259,6 +285,17 @@ export default function PromptDetail({
                       <p key={index} className={index > 0 ? 'mt-2' : ''}>{line}</p>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {prompt?.categories && prompt.categories.length > 0 && (
+                <div className='flex flex-wrap gap-2'>
+                  {prompt.categories.map((cat) => (
+                    <Badge key={cat.id} variant='outline' className='gap-1'>
+                      <Folder className='h-3 w-3' />
+                      {cat.name}
+                    </Badge>
+                  ))}
                 </div>
               )}
 

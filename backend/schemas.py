@@ -40,6 +40,34 @@ class TagResponse(TagBase):
         from_attributes = True
 
 
+class CategoryCreate(BaseModel):
+    name: str
+    parent_id: Optional[int] = None
+    sort_order: int = 0
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    parent_id: Optional[int] = None
+    sort_order: Optional[int] = None
+
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    parent_id: Optional[int] = None
+    user_id: Optional[int] = None
+    sort_order: int = 0
+    created_at: datetime
+    children: List["CategoryResponse"] = []
+
+    class Config:
+        from_attributes = True
+
+
+CategoryResponse.model_rebuild()
+
+
 class PromptVersionResponse(BaseModel):
     id: int
     prompt_id: int
@@ -57,6 +85,7 @@ class PromptCreate(BaseModel):
     content: str
     variables: Optional[str] = None
     is_public: bool = False
+    category_ids: List[int] = []
     tag_ids: List[int] = []
     new_tags: List[str] = []
 
@@ -67,6 +96,7 @@ class PromptUpdate(BaseModel):
     content: Optional[str] = None
     variables: Optional[str] = None
     is_public: Optional[bool] = None
+    category_ids: Optional[List[int]] = None
     tag_ids: Optional[List[int]] = None
     new_tags: List[str] = []
 
@@ -82,7 +112,10 @@ class PromptListItem(BaseModel):
     is_public: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
+    categories: List[CategoryResponse] = []
     tags: List[TagResponse] = []
+    favorite_count: int = 0
+    is_favorited: bool = False
 
     class Config:
         from_attributes = True
@@ -99,8 +132,21 @@ class PromptResponse(BaseModel):
     is_public: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
+    categories: List[CategoryResponse] = []
     tags: List[TagResponse] = []
     versions: List[PromptVersionResponse] = []
+    favorite_count: int = 0
+    is_favorited: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class FavoriteResponse(BaseModel):
+    id: int
+    user_id: int
+    prompt_id: int
+    created_at: datetime
 
     class Config:
         from_attributes = True

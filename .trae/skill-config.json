@@ -1,0 +1,156 @@
+{
+  "skills": [
+    {
+      "name": "backend-api",
+      "description": "创建或修改后端 FastAPI 接口。当需要新增 API 端点、修改路由逻辑、添加 Pydantic schema 或 SQLAlchemy 模型时触发。",
+      "triggers": ["新增接口", "新增API", "添加路由", "修改接口", "后端接口", "创建端点", "添加schema", "添加模型字段"],
+      "instructions": [
+        "路由定义在 backend/main.py 中，不使用 routers/ 目录",
+        "使用 SQLAlchemy 2.0 的 Mapped/mapped_column 风格定义模型",
+        "使用 Pydantic v2 语法：model_dump() 替代 dict()，from_attributes = True 替代 orm_mode",
+        "需要认证的端点使用 Depends(get_current_user)",
+        "错误处理使用 HTTPException，detail 使用中文",
+        "分页信息通过响应头 X-Total-Count/X-Page/X-Page-Size/X-Total-Pages 返回",
+        "新建标签通过 new_tags 字段，系统自动创建不存在的标签",
+        "内容变更时自动创建 PromptVersion",
+        "修改完成后运行 ruff check backend/ 和 ruff format backend/"
+      ],
+      "relatedFiles": [
+        "backend/main.py",
+        "backend/models.py",
+        "backend/schemas.py",
+        "backend/auth.py",
+        "backend/database.py"
+      ]
+    },
+    {
+      "name": "frontend-component",
+      "description": "创建或修改前端 React 组件。当需要新增页面、业务组件、UI 组件或修改现有组件时触发。",
+      "triggers": ["新增组件", "添加页面", "修改组件", "前端页面", "新建UI组件", "React组件", "添加弹窗", "添加对话框"],
+      "instructions": [
+        "使用函数式组件 + Hooks，不使用 class 组件",
+        "样式使用 Tailwind CSS + cn() 工具函数",
+        "路径别名 @ 映射到 src/",
+        "API 调用统一在 src/api.ts 中定义函数和接口",
+        "认证 API 调用通过 useApi() hook 封装",
+        "UI 基础组件放在 components/ui/ 下，遵循 shadcn/ui 模式",
+        "业务组件放在 components/ 下",
+        "弹窗状态由 Layout 组件集中管理",
+        "通知使用 useToast() hook",
+        "修改完成后运行 npm run lint 和 npm run build"
+      ],
+      "relatedFiles": [
+        "frontend/src/App.tsx",
+        "frontend/src/api.ts",
+        "frontend/src/components/Layout.tsx",
+        "frontend/src/components/Sidebar.tsx",
+        "frontend/src/components/PromptForm.tsx",
+        "frontend/src/components/PromptDetail.tsx",
+        "frontend/src/hooks/useApi.ts",
+        "frontend/src/contexts/AuthContext.tsx"
+      ]
+    },
+    {
+      "name": "database-migration",
+      "description": "修改数据库模型或添加新表。当需要新增数据模型、修改字段、添加关联关系时触发。",
+      "triggers": ["新增表", "修改模型", "添加字段", "数据库迁移", "新增关联", "修改字段类型", "添加索引"],
+      "instructions": [
+        "模型定义在 backend/models.py",
+        "使用 SQLAlchemy 2.0 的 Mapped/mapped_column 风格",
+        "多对多关系使用 Table() 定义关联表，外键设置 ondelete='CASCADE'",
+        "Base.metadata.create_all(bind=engine) 在 main.py 启动时自动执行",
+        "项目无 Alembic 迁移工具，模型变更直接反映到数据库",
+        "Pydantic schema 在 backend/schemas.py 中同步更新",
+        "动态计算字段（如 favorite_count）通过函数附加，不持久化",
+        "hybrid_property 用于从关联模型获取计算属性（如 owner_username）"
+      ],
+      "relatedFiles": [
+        "backend/models.py",
+        "backend/schemas.py",
+        "backend/database.py",
+        "backend/main.py"
+      ]
+    },
+    {
+      "name": "auth-security",
+      "description": "处理认证和权限相关逻辑。当需要修改登录注册、JWT配置、权限校验、密码策略时触发。",
+      "triggers": ["认证", "登录", "注册", "权限", "JWT", "密码", "token", "授权", "401", "403"],
+      "instructions": [
+        "JWT 使用 python-jose，算法 HS256，有效期 60 分钟",
+        "密码哈希使用 passlib bcrypt",
+        "get_current_user 依赖通过 OAuth2PasswordBearer 提取 token",
+        "Token sub 字段为用户 ID 字符串形式",
+        "前端 token 存储在 localStorage（prompthub_token + prompthub_user）",
+        "useApi hook 检测 401 自动调用 logout()",
+        "SECRET_KEY 为必须环境变量",
+        "数据可见性：用户自己的 + is_public=True 的提示词",
+        "修改/删除操作仅所有者可执行"
+      ],
+      "relatedFiles": [
+        "backend/auth.py",
+        "backend/main.py",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/hooks/useApi.ts",
+        "frontend/src/api.ts"
+      ]
+    },
+    {
+      "name": "test-writing",
+      "description": "编写后端或前端测试。当需要添加测试用例、修改测试配置、调试测试失败时触发。",
+      "triggers": ["写测试", "添加测试", "测试用例", "单元测试", "测试失败", "pytest", "vitest"],
+      "instructions": [
+        "后端测试使用 pytest + FastAPI TestClient，放在 tests/ 目录",
+        "conftest.py 提供 fixtures：db_session/client/test_user/auth_client/second_user/second_auth_client",
+        "测试使用独立 SQLite 数据库（test_prompts.db），每个测试自动建表/删表",
+        "SECRET_KEY 通过 os.environ.setdefault 设置测试默认值",
+        "前端测试使用 Vitest + Testing Library + jsdom，放在 frontend/src/test/",
+        "前端测试配置在 frontend/vitest.config.ts",
+        "后端运行：pytest",
+        "前端运行：cd frontend && npm run test"
+      ],
+      "relatedFiles": [
+        "tests/conftest.py",
+        "tests/test_auth.py",
+        "tests/test_prompts.py",
+        "tests/test_categories.py",
+        "tests/test_favorites.py",
+        "frontend/src/test/setup.ts",
+        "frontend/vitest.config.ts"
+      ]
+    },
+    {
+      "name": "deploy-docker",
+      "description": "处理 Docker 容器化和 CI/CD 部署。当需要修改 Docker 配置、CI 流水线、Nginx 配置时触发。",
+      "triggers": ["Docker", "部署", "CI/CD", "Nginx", "容器", "docker-compose", "GitHub Actions", "生产环境"],
+      "instructions": [
+        "Docker Compose 定义 backend + frontend 两个服务",
+        "后端镜像：Dockerfile.backend，暴露 8000 端口",
+        "前端镜像：frontend/Dockerfile，Nginx 监听 80 端口，映射到宿主机 5173",
+        "前端构建参数 VITE_API_BASE=/api（生产环境通过 Nginx 反向代理）",
+        "SECRET_KEY 为必须环境变量，通过 docker-compose environment 或 .env 传入",
+        "数据库文件通过 volume 挂载：./prompts.db:/app/prompts.db",
+        "CI 流水线：backend-lint → frontend-lint → frontend-build → docker-build → deploy",
+        "Docker push 仅在 main 分支 push 时触发",
+        "部署通过 SSH 执行 docker compose pull && docker compose up -d"
+      ],
+      "relatedFiles": [
+        "docker-compose.yml",
+        "Dockerfile.backend",
+        "frontend/Dockerfile",
+        "frontend/nginx.conf",
+        ".github/workflows/ci-cd.yml"
+      ]
+    }
+  ],
+  "globalRules": {
+    "language": "zh-CN",
+    "errorMessages": "中文",
+    "uiCopy": "中文",
+    "codeComments": "不添加冗余注释，代码应自解释",
+    "lintBackend": "ruff check backend/ && ruff format --check backend/",
+    "lintFrontend": "cd frontend && npm run lint",
+    "buildFrontend": "cd frontend && npm run build",
+    "testBackend": "pytest",
+    "testFrontend": "cd frontend && npm run test"
+  }
+}
