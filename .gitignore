@@ -7,9 +7,9 @@ build/
 .venv/
 venv/
 
-# Database
-*.db
+# Database (keep prompts.db and test_prompts.db in repo)
 *.db.backup.*
+test_prompts.db
 
 # Node
 node_modules/
