@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Tag, Category } from '@/api'
-import { Heart, FolderOpen, Folder, ChevronRight, ChevronDown, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Heart, FolderOpen, Folder, ChevronRight, ChevronDown, Plus, MoreHorizontal, Pencil, Trash2, Lock, Users } from 'lucide-react'
 
 interface SidebarProps {
   tags: Tag[]
@@ -37,6 +37,7 @@ function CategoryTreeItem({
   const [showMenu, setShowMenu] = useState(false)
   const hasChildren = category.children && category.children.length > 0
   const isSelected = selectedCategoryId === category.id
+  const isForeign = !!category.is_foreign
 
   return (
     <div>
@@ -44,7 +45,9 @@ function CategoryTreeItem({
         className={`group flex items-center gap-1 px-2 py-1.5 rounded-md text-sm cursor-pointer transition-colors ${
           isSelected
             ? 'bg-primary text-primary-foreground'
-            : 'hover:bg-accent'
+            : isForeign
+              ? 'hover:bg-accent/50 text-muted-foreground hover:text-muted-foreground'
+              : 'hover:bg-accent'
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => onCategorySelect(category.id)}
@@ -65,42 +68,54 @@ function CategoryTreeItem({
         )}
         {isSelected ? (
           <FolderOpen className="h-4 w-4 shrink-0" />
+        ) : isForeign ? (
+          <Lock className="h-4 w-4 shrink-0 opacity-50" />
         ) : (
           <Folder className="h-4 w-4 shrink-0" />
         )}
-        <span className="flex-1 truncate">{category.name}</span>
-        <div className={`shrink-0 ${showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
-          <div className="relative">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-              className="p-0.5 hover:bg-accent/50 rounded"
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
-            {showMenu && (
-              <div className="absolute right-0 top-full z-10 mt-1 w-32 bg-popover border rounded-md shadow-md py-1">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); onCreateCategory(category.id) }}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2"
-                >
-                  <Plus className="h-3 w-3" /> 新建子分类
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEditCategory(category) }}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2"
-                >
-                  <Pencil className="h-3 w-3" /> 重命名
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); onDeleteCategory(category) }}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-destructive flex items-center gap-2"
-                >
-                  <Trash2 className="h-3 w-3" /> 删除
-                </button>
-              </div>
-            )}
+        <span className={`flex-1 truncate ${isForeign && !isSelected ? 'opacity-70' : ''}`}>
+          {category.name}
+        </span>
+        {isForeign && !isSelected && (
+          <span className="shrink-0 text-xs opacity-50 flex items-center gap-0.5">
+            <Users className="h-3 w-3" />
+            {category.owner_username}
+          </span>
+        )}
+        {!isForeign && (
+          <div className={`shrink-0 ${showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+                className="p-0.5 hover:bg-accent/50 rounded"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+              {showMenu && (
+                <div className="absolute right-0 top-full z-10 mt-1 w-32 bg-popover border rounded-md shadow-md py-1 text-foreground">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowMenu(false); onCreateCategory(category.id) }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2"
+                  >
+                    <Plus className="h-3 w-3" /> 新建子分类
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEditCategory(category) }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2"
+                  >
+                    <Pencil className="h-3 w-3" /> 重命名
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowMenu(false); onDeleteCategory(category) }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-destructive flex items-center gap-2"
+                  >
+                    <Trash2 className="h-3 w-3" /> 删除
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
       {hasChildren && expanded && category.children.map((child) => (
         <CategoryTreeItem

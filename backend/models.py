@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime
 from typing import List, Optional
 
@@ -76,6 +77,9 @@ class Prompt(Base):
 
     favorited_by: Mapped[List["Favorite"]] = relationship(back_populates="prompt", cascade="all, delete-orphan")
 
+    shared_links: Mapped[List["SharedLink"]] = relationship(back_populates="prompt", cascade="all, delete-orphan")
+    collaborators: Mapped[List["PromptCollaborator"]] = relationship(back_populates="prompt", cascade="all, delete-orphan")
+
 
 class Category(Base):
     __tablename__ = "categories"
@@ -138,3 +142,35 @@ class PromptVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     prompt: Mapped["Prompt"] = relationship(back_populates="versions")
+
+
+class SharedLink(Base):
+    __tablename__ = "shared_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    prompt_id: Mapped[int] = mapped_column(Integer, ForeignKey("prompts.id", ondelete="CASCADE"), nullable=False, index=True)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    prompt: Mapped["Prompt"] = relationship(back_populates="shared_links")
+    creator: Mapped["User"] = relationship()
+
+    @staticmethod
+    def generate_token() -> str:
+        return secrets.token_urlsafe(32)
+
+
+class PromptCollaborator(Base):
+    __tablename__ = "prompt_collaborators"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    prompt_id: Mapped[int] = mapped_column(Integer, ForeignKey("prompts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    prompt: Mapped["Prompt"] = relationship(back_populates="collaborators")
+    user: Mapped["User"] = relationship()

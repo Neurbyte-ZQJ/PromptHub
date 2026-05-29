@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     try {
       const { token, user } = await login(formData)
-      authLogin(token.access_token, user)
+      authLogin(token.access_token, token.refresh_token, user)
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败')
     } finally {
@@ -80,6 +80,11 @@ export default function LoginPage() {
             </Button>
           </form>
           <div className="mt-6 text-center text-sm text-muted-foreground">
+            <Link to="/forgot-password" className="text-primary hover:underline font-medium">
+              忘记密码？
+            </Link>
+          </div>
+          <div className="mt-2 text-center text-sm text-muted-foreground">
             还没有账号？{' '}
             <Link to="/register" className="text-primary hover:underline font-medium">
               立即注册

@@ -1,0 +1,94 @@
+{
+  "version": "1.0.0",
+  "description": "能力模块映射表 - 定义能力模块与智能体、命令的关联关系",
+  "capabilities": {
+    "capability.api-development": {
+      "name": "API 开发",
+      "file": "agents/capabilities/api-development.md",
+      "scope": "backend",
+      "agents": ["agent.backend-developer", "agent.fullstack-developer", "agent.bug-fixer"],
+      "commands": ["/new-api"],
+      "dependencies": ["capability.database-operations"],
+      "validation": {
+        "lint": "ruff check backend/ && ruff format --check backend/",
+        "test": "pytest"
+      }
+    },
+    "capability.frontend-development": {
+      "name": "前端开发",
+      "file": "agents/capabilities/frontend-development.md",
+      "scope": "frontend",
+      "agents": ["agent.frontend-developer", "agent.fullstack-developer", "agent.bug-fixer"],
+      "commands": ["/new-component"],
+      "dependencies": [],
+      "validation": {
+        "lint": "cd frontend && npm run lint",
+        "build": "cd frontend && npm run build",
+        "test": "cd frontend && npm run test"
+      }
+    },
+    "capability.database-operations": {
+      "name": "数据库操作",
+      "file": "agents/capabilities/database-operations.md",
+      "scope": "backend",
+      "agents": ["agent.backend-developer", "agent.fullstack-developer", "agent.bug-fixer"],
+      "commands": ["/new-model", "/db-query"],
+      "dependencies": [],
+      "validation": {
+        "lint": "ruff check backend/ && ruff format --check backend/",
+        "test": "pytest"
+      }
+    },
+    "capability.code-review": {
+      "name": "代码审查",
+      "file": "agents/capabilities/code-review.md",
+      "scope": "fullstack",
+      "agents": ["agent.code-reviewer"],
+      "commands": ["/review"],
+      "dependencies": [],
+      "validation": {}
+    },
+    "capability.testing": {
+      "name": "测试",
+      "file": "agents/capabilities/testing.md",
+      "scope": "fullstack",
+      "agents": ["agent.test-engineer", "agent.bug-fixer"],
+      "commands": ["/test-all"],
+      "dependencies": [],
+      "validation": {
+        "test_backend": "pytest",
+        "test_frontend": "cd frontend && npm run test"
+      }
+    },
+    "capability.deployment": {
+      "name": "部署",
+      "file": "agents/capabilities/deployment.md",
+      "scope": "infra",
+      "agents": ["agent.devops-engineer"],
+      "commands": ["/deploy"],
+      "dependencies": ["capability.testing", "capability.code-review"],
+      "validation": {
+        "build": "docker compose build",
+        "health": "docker compose ps"
+      }
+    },
+    "capability.security-audit": {
+      "name": "安全审计",
+      "file": "agents/capabilities/security-audit.md",
+      "scope": "fullstack",
+      "agents": ["agent.code-reviewer"],
+      "commands": ["/review"],
+      "dependencies": [],
+      "validation": {}
+    }
+  },
+  "dependency_graph": {
+    "capability.api-development": ["capability.database-operations"],
+    "capability.frontend-development": [],
+    "capability.database-operations": [],
+    "capability.code-review": [],
+    "capability.testing": [],
+    "capability.deployment": ["capability.testing", "capability.code-review"],
+    "capability.security-audit": []
+  }
+}

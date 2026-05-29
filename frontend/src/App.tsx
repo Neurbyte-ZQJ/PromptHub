@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+import SharedPromptPage from './pages/SharedPromptPage'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -19,6 +22,10 @@ function AppContent() {
     <BrowserRouter>
       <Routes>
         <Route
+          path="/shared/:token"
+          element={<SharedPromptPage />}
+        />
+        <Route
           path="/login"
           element={
             <AuthRoute>
@@ -31,6 +38,22 @@ function AppContent() {
           element={
             <AuthRoute>
               <RegisterPage />
+            </AuthRoute>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <AuthRoute>
+              <ForgotPasswordPage />
+            </AuthRoute>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <AuthRoute>
+              <ResetPasswordPage />
             </AuthRoute>
           }
         />

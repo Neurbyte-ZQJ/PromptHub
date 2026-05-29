@@ -26,7 +26,21 @@ class UserResponse(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordReset(BaseModel):
+    token: str
+    new_password: str
 
 
 class TagBase(BaseModel):
@@ -57,6 +71,8 @@ class CategoryResponse(BaseModel):
     name: str
     parent_id: Optional[int] = None
     user_id: Optional[int] = None
+    owner_username: Optional[str] = None
+    is_foreign: bool = False
     sort_order: int = 0
     created_at: datetime
     children: List["CategoryResponse"] = []
@@ -116,6 +132,7 @@ class PromptListItem(BaseModel):
     tags: List[TagResponse] = []
     favorite_count: int = 0
     is_favorited: bool = False
+    collaborator_role: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -137,6 +154,7 @@ class PromptResponse(BaseModel):
     versions: List[PromptVersionResponse] = []
     favorite_count: int = 0
     is_favorited: bool = False
+    collaborator_role: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -146,6 +164,59 @@ class FavoriteResponse(BaseModel):
     id: int
     user_id: int
     prompt_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SharedLinkCreate(BaseModel):
+    password: Optional[str] = None
+    expires_hours: Optional[int] = None
+
+
+class SharedLinkResponse(BaseModel):
+    id: int
+    prompt_id: int
+    token: str
+    has_password: bool = False
+    expires_at: Optional[datetime] = None
+    created_by: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SharedPromptResponse(BaseModel):
+    title: str
+    scenario: Optional[str] = None
+    content: str
+    variables: Optional[str] = None
+    owner_username: Optional[str] = None
+    categories: List[CategoryResponse] = []
+    tags: List[TagResponse] = []
+
+
+class SharedLinkAccess(BaseModel):
+    password: Optional[str] = None
+
+
+class CollaboratorAdd(BaseModel):
+    user_id: int
+    role: str = "viewer"
+
+
+class CollaboratorUpdate(BaseModel):
+    role: str
+
+
+class CollaboratorResponse(BaseModel):
+    id: int
+    prompt_id: int
+    user_id: int
+    role: str
+    username: Optional[str] = None
     created_at: datetime
 
     class Config:

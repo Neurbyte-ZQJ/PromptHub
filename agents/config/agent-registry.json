@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "description": "PromptHub 智能体注册表 - 定义所有可用智能体及其元信息",
+  "agents": [
+    {
+      "id": "agent.backend-developer",
+      "name": "后端开发智能体",
+      "description": "负责 FastAPI 后端接口开发、SQLAlchemy 模型设计和认证逻辑实现",
+      "capabilities": [
+        "capability.api-development",
+        "capability.database-operations"
+      ],
+      "triggers": ["后端", "API", "接口", "路由", "模型", "数据库", "FastAPI"],
+      "scope": "backend",
+      "priority": 1,
+      "related_commands": ["/new-api", "/new-model", "/dev-backend"],
+      "related_files": [
+        "backend/main.py",
+        "backend/models.py",
+        "backend/schemas.py",
+        "backend/auth.py",
+        "backend/database.py"
+      ]
+    },
+    {
+      "id": "agent.frontend-developer",
+      "name": "前端开发智能体",
+      "description": "负责 React 组件开发、页面构建、样式处理和 API 集成",
+      "capabilities": [
+        "capability.frontend-development"
+      ],
+      "triggers": ["前端", "组件", "页面", "React", "样式", "Tailwind"],
+      "scope": "frontend",
+      "priority": 1,
+      "related_commands": ["/new-component", "/dev-frontend"],
+      "related_files": [
+        "frontend/src/App.tsx",
+        "frontend/src/api.ts",
+        "frontend/src/components/Layout.tsx",
+        "frontend/src/hooks/useApi.ts",
+        "frontend/src/contexts/AuthContext.tsx"
+      ]
+    },
+    {
+      "id": "agent.fullstack-developer",
+      "name": "全栈开发智能体",
+      "description": "负责跨前后端的功能开发，协调后端 API 和前端组件的集成",
+      "capabilities": [
+        "capability.api-development",
+        "capability.frontend-development",
+        "capability.database-operations"
+      ],
+      "triggers": ["新功能", "全栈", "端到端", "完整功能"],
+      "scope": "fullstack",
+      "priority": 2,
+      "related_commands": ["/new-api", "/new-component", "/new-model"],
+      "related_files": []
+    },
+    {
+      "id": "agent.code-reviewer",
+      "name": "代码审查智能体",
+      "description": "负责代码质量审查、安全审计和最佳实践检查",
+      "capabilities": [
+        "capability.code-review",
+        "capability.security-audit"
+      ],
+      "triggers": ["审查", "review", "代码质量", "安全"],
+      "scope": "fullstack",
+      "priority": 3,
+      "related_commands": ["/review"],
+      "related_files": []
+    },
+    {
+      "id": "agent.test-engineer",
+      "name": "测试工程师智能体",
+      "description": "负责后端和前端测试的编写、执行和调试",
+      "capabilities": [
+        "capability.testing"
+      ],
+      "triggers": ["测试", "test", "pytest", "vitest", "单元测试"],
+      "scope": "fullstack",
+      "priority": 3,
+      "related_commands": ["/test-all"],
+      "related_files": [
+        "tests/conftest.py",
+        "frontend/src/test/setup.ts"
+      ]
+    },
+    {
+      "id": "agent.devops-engineer",
+      "name": "运维工程师智能体",
+      "description": "负责 Docker 容器化、CI/CD 流水线和生产部署",
+      "capabilities": [
+        "capability.deployment"
+      ],
+      "triggers": ["部署", "Docker", "CI/CD", "Nginx", "生产环境"],
+      "scope": "infra",
+      "priority": 4,
+      "related_commands": ["/deploy"],
+      "related_files": [
+        "docker-compose.yml",
+        "Dockerfile.backend",
+        "frontend/Dockerfile",
+        "frontend/nginx.conf",
+        ".github/workflows/ci-cd.yml"
+      ]
+    },
+    {
+      "id": "agent.bug-fixer",
+      "name": "Bug 修复智能体",
+      "description": "负责系统化定位和修复 Bug，确保修复不引入新问题",
+      "capabilities": [
+        "capability.api-development",
+        "capability.frontend-development",
+        "capability.database-operations",
+        "capability.testing"
+      ],
+      "triggers": ["Bug", "修复", "错误", "异常", "报错"],
+      "scope": "fullstack",
+      "priority": 2,
+      "related_commands": ["/fix-bug"],
+      "related_files": []
+    }
+  ]
+}

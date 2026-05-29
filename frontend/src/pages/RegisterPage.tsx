@@ -26,7 +26,7 @@ export default function RegisterPage() {
     try {
       await register(formData)
       const { token, user } = await login({ email: formData.email, password: formData.password })
-      authLogin(token.access_token, user)
+      authLogin(token.access_token, token.refresh_token, user)
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败')
     } finally {

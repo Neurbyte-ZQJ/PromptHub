@@ -5,7 +5,6 @@ import {
   register,
   getCurrentUser,
   getPrompts,
-  getPrompt,
   createPrompt,
   updatePrompt,
   deletePrompt,
@@ -23,12 +22,13 @@ beforeEach(() => {
   vi.restoreAllMocks()
 })
 
-function mockFetchResponse(data: unknown, ok = true, status = 200) {
+function mockFetchResponse(data: unknown, ok = true, status = 200, headers: Record<string, string> = {}) {
   return vi.fn().mockResolvedValue({
     ok,
     status,
     json: () => Promise.resolve(data),
     blob: () => Promise.resolve(new Blob()),
+    headers: new Headers(headers),
   })
 }
 
@@ -66,22 +66,20 @@ describe('fetchApi', () => {
     )
   })
 
-  it('should call onUnauthorized on 401', async () => {
-    const onUnauthorized = vi.fn()
+  it('should throw UNAUTHORIZED on 401', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
       json: () => Promise.resolve({}),
     })
 
-    await expect(fetchApi('/test', {}, 'token', onUnauthorized)).rejects.toThrow('未授权')
-    expect(onUnauthorized).toHaveBeenCalled()
+    await expect(fetchApi('/test', {}, 'token')).rejects.toThrow('UNAUTHORIZED')
   })
 })
 
 describe('login', () => {
   it('should login and return token with user', async () => {
-    const tokenData = { access_token: 'jwt-token', token_type: 'bearer' }
+    const tokenData = { access_token: 'jwt-token', refresh_token: 'jwt-refresh', token_type: 'bearer' }
     const userData = { id: 1, username: 'testuser', email: 'test@test.com', created_at: '2024-01-01' }
 
     globalThis.fetch = vi.fn()
@@ -141,10 +139,16 @@ describe('getPrompts', () => {
     const prompts = [
       { id: 1, title: 'P1', content: 'c1', is_public: false, created_at: '2024-01-01' },
     ]
-    globalThis.fetch = mockFetchResponse(prompts)
+    globalThis.fetch = mockFetchResponse(prompts, true, 200, {
+      'X-Total-Count': '1',
+      'X-Page': '1',
+      'X-Page-Size': '20',
+      'X-Total-Pages': '1',
+    })
 
-    const result = await getPrompts('token', undefined, { search: 'test', page: 1 })
-    expect(result).toHaveLength(1)
+    const result = await getPrompts('token', { search: 'test', page: 1 })
+    expect(result.data).toHaveLength(1)
+    expect(result.pagination.totalCount).toBe(1)
 
     const calledUrl = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
     expect(calledUrl).toContain('search=test')
@@ -152,10 +156,16 @@ describe('getPrompts', () => {
   })
 
   it('should fetch prompts without params', async () => {
-    globalThis.fetch = mockFetchResponse([])
+    globalThis.fetch = mockFetchResponse([], true, 200, {
+      'X-Total-Count': '0',
+      'X-Page': '1',
+      'X-Page-Size': '20',
+      'X-Total-Pages': '0',
+    })
 
     const result = await getPrompts('token')
-    expect(result).toEqual([])
+    expect(result.data).toEqual([])
+    expect(result.pagination.totalCount).toBe(0)
 
     const calledUrl = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
     expect(calledUrl).toBe(`${API_BASE}/prompts`)

@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { X, Copy, Edit, Trash2, Globe, Lock, User, Heart, Folder } from 'lucide-react'
+import { X, Copy, Edit, Trash2, Globe, Lock, User, Heart, Folder, Share2, Users } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { useApi } from '@/hooks/useApi'
 import type { PromptDetail as PromptDetailType } from '@/api'
@@ -31,8 +31,11 @@ interface PromptDetailProps {
   onEdit: () => void
   onDelete: (id: number) => void
   onToggleFavorite: (id: number) => void
+  onShare: () => void
+  onManageCollaborators: () => void
   promptId: number | null
   externalFavoriteState?: { is_favorited: boolean; favorite_count: number }
+  currentUserId?: number
 }
 
 export default function PromptDetail({
@@ -41,8 +44,11 @@ export default function PromptDetail({
   onEdit,
   onDelete,
   onToggleFavorite,
+  onShare,
+  onManageCollaborators,
   promptId,
   externalFavoriteState,
+  currentUserId,
 }: PromptDetailProps) {
   const [prompt, setPrompt] = useState<PromptDetailType | null>(null)
   const [loading, setLoading] = useState(false)
@@ -121,6 +127,7 @@ export default function PromptDetail({
           : prev
       )
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalFavoriteState])
 
   const handleVariableChange = (variable: string, value: string) => {
@@ -155,6 +162,10 @@ export default function PromptDetail({
 
   if (!isOpen) return null
 
+  const isOwner = prompt?.user_id === currentUserId
+  const isEditor = prompt?.collaborator_role === 'editor'
+  const canEdit = isOwner || isEditor
+
   const versions = prompt?.versions || []
   const sortedVersions = [...versions].sort(
     (a, b) => b.version_number - a.version_number
@@ -181,7 +192,7 @@ export default function PromptDetail({
                 </p>
               )}
             </div>
-            <Button variant='outline' size='sm' onClick={onEdit}>
+            <Button variant='outline' size='sm' onClick={onEdit} disabled={!canEdit}>
               <Edit className='h-4 w-4 mr-2' />
               编辑
             </Button>
@@ -197,10 +208,24 @@ export default function PromptDetail({
                 <span className='ml-1'>({prompt.favorite_count})</span>
               )}
             </Button>
-            <Button variant='outline' size='sm' onClick={() => setShowDeleteConfirm(true)} className='text-destructive hover:bg-destructive hover:text-white'>
-              <Trash2 className='h-4 w-4 mr-2' />
-              删除
-            </Button>
+            {isOwner && (
+              <>
+                <Button variant='outline' size='sm' onClick={onShare}>
+                  <Share2 className='h-4 w-4 mr-2' />
+                  分享
+                </Button>
+                <Button variant='outline' size='sm' onClick={onManageCollaborators}>
+                  <Users className='h-4 w-4 mr-2' />
+                  协作
+                </Button>
+              </>
+            )}
+            {isOwner && (
+              <Button variant='outline' size='sm' onClick={() => setShowDeleteConfirm(true)} className='text-destructive hover:bg-destructive hover:text-white'>
+                <Trash2 className='h-4 w-4 mr-2' />
+                删除
+              </Button>
+            )}
           </div>
           <button
             onClick={onClose}

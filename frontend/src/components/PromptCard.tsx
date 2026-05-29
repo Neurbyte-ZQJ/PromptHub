@@ -1,15 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Trash2, User, Heart, Folder } from 'lucide-react'
+import { Trash2, User, Heart, Folder, Shield, Eye } from 'lucide-react'
 import { Prompt } from '@/api'
 
 interface PromptCardProps {
   prompt: Prompt
   onDelete: (e: React.MouseEvent, id: number) => void
   onToggleFavorite: (e: React.MouseEvent, id: number) => void
+  currentUserId?: number
 }
 
-export default function PromptCard({ prompt, onDelete, onToggleFavorite }: PromptCardProps) {
+export default function PromptCard({ prompt, onDelete, onToggleFavorite, currentUserId }: PromptCardProps) {
+  const isOwner = prompt.user_id === currentUserId
+  const isEditor = prompt.collaborator_role === 'editor'
+
   return (
     <Card className="hover:shadow-md transition-shadow cursor-pointer group relative h-full flex flex-col">
       <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -21,14 +25,16 @@ export default function PromptCard({ prompt, onDelete, onToggleFavorite }: Promp
         >
           <Heart className={`h-4 w-4 ${prompt.is_favorited ? 'fill-current' : ''}`} />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-          onClick={(e) => onDelete(e, prompt.id)}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {(isOwner || isEditor) && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={(e) => onDelete(e, prompt.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2 pr-16">
@@ -42,6 +48,18 @@ export default function PromptCard({ prompt, onDelete, onToggleFavorite }: Promp
           {prompt.is_public && (
             <span className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
               公开
+            </span>
+          )}
+          {prompt.collaborator_role === 'editor' && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-medium">
+              <Shield className="h-3 w-3" />
+              可编辑
+            </span>
+          )}
+          {prompt.collaborator_role === 'viewer' && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs font-medium">
+              <Eye className="h-3 w-3" />
+              协作
             </span>
           )}
         </div>

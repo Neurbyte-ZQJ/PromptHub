@@ -46,6 +46,7 @@ class TestLogin:
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
+        assert "refresh_token" in data
         assert data["token_type"] == "bearer"
 
     def test_login_wrong_password(self, client, test_user):
@@ -60,6 +61,42 @@ class TestLogin:
         response = client.post("/api/auth/login", json={
             "email": "nobody@example.com",
             "password": "password123",
+        })
+        assert response.status_code == 401
+
+
+class TestRefreshToken:
+    def test_refresh_success(self, client, test_user):
+        login_response = client.post("/api/auth/login", json={
+            "email": "test@example.com",
+            "password": "testpass123",
+        })
+        refresh_token_value = login_response.json()["refresh_token"]
+
+        response = client.post("/api/auth/refresh", json={
+            "refresh_token": refresh_token_value,
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["token_type"] == "bearer"
+
+    def test_refresh_with_access_token_fails(self, client, test_user):
+        login_response = client.post("/api/auth/login", json={
+            "email": "test@example.com",
+            "password": "testpass123",
+        })
+        access_token = login_response.json()["access_token"]
+
+        response = client.post("/api/auth/refresh", json={
+            "refresh_token": access_token,
+        })
+        assert response.status_code == 401
+
+    def test_refresh_with_invalid_token(self, client):
+        response = client.post("/api/auth/refresh", json={
+            "refresh_token": "invalidtoken",
         })
         assert response.status_code == 401
 

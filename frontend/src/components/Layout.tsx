@@ -1,25 +1,23 @@
 
 import { useState, useEffect, useCallback } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Plus, Search, LogOut, User, Download, Upload } from 'lucide-react'
 import Sidebar from './Sidebar'
-import PromptCard from './PromptCard'
+import Header from './Header'
+import PromptGrid from './PromptGrid'
 import PromptForm from './PromptForm'
 import PromptDetail from './PromptDetail'
+import DeletePromptDialog from './DeletePromptDialog'
+import CategoryDialog from './CategoryDialog'
+import DeleteCategoryDialog from './DeleteCategoryDialog'
+import ImportDialog from './ImportDialog'
+import ShareDialog from './ShareDialog'
+import CollaboratorDialog from './CollaboratorDialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApi } from '@/hooks/useApi'
 import { useToast } from '@/components/ui/toast'
-import type { Prompt, Tag, Category, CategoryFormData } from '@/api'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
+import { useFavoriteToggle } from '@/hooks/useFavoriteToggle'
+import type { Prompt, Tag, Category, PaginationInfo } from '@/api'
+
+const PAGE_SIZE = 20
 
 export default function Layout() {
   const [prompts, setPrompts] = useState<Prompt[]>([])
@@ -28,65 +26,118 @@ export default function Layout() {
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null)
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    totalCount: 0,
+    page: 1,
+    pageSize: PAGE_SIZE,
+    totalPages: 0,
+  })
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null)
   const [detailPromptId, setDetailPromptId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null)
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
 
-  // 分类对话框状态
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
-  const [categoryForm, setCategoryForm] = useState<CategoryFormData>({ name: '' })
   const [categoryParentId, setCategoryParentId] = useState<number | null>(null)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<Category | null>(null)
 
-  // 导入对话框状态
   const [importDialogOpen, setImportDialogOpen] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importing, setImporting] = useState(false)
 
-  const { user, logout } = useAuth()
-  const { getPrompts, getTags, getCategories, createCategory, updateCategory, deleteCategory, deletePrompt, toggleFavorite, exportPrompts, downloadImportTemplate, importPrompts } = useApi()
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [sharePromptId, setSharePromptId] = useState<number | null>(null)
+  const [sharePromptTitle, setSharePromptTitle] = useState<string>('')
+
+  const [collaboratorDialogOpen, setCollaboratorDialogOpen] = useState(false)
+  const [collaboratorPromptId, setCollaboratorPromptId] = useState<number | null>(null)
+  const [collaboratorPromptTitle, setCollaboratorPromptTitle] = useState<string>('')
+
+  const { user } = useAuth()
+  const { getPrompts, getTags, getCategories, deletePrompt, deleteCategory, exportPrompts } = useApi()
   const { addToast } = useToast()
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [promptsData, tagsData, categoriesData] = await Promise.all([
-        getPrompts(),
-        getTags(),
-        getCategories(),
-      ])
-      setPrompts(promptsData)
-      setTags(tagsData)
-      setCategories(categoriesData)
-    } catch (error) {
-      console.error('Failed to fetch data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [getPrompts, getTags, getCategories])
+  const refreshPrompts = useCallback(() => {
+    setRefreshKey(k => k + 1)
+  }, [])
+
+  const { toggleFavoriteById } = useFavoriteToggle(prompts, setPrompts, refreshPrompts)
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
-  const filteredPrompts = prompts.filter((prompt) => {
-    const matchesTag = selectedTagId === null
-      ? true
-      : prompt.tags.some((tag) => tag.id === selectedTagId)
-    const matchesCategory = selectedCategoryId === null
-      ? true
-      : prompt.categories.some((cat) => cat.id === selectedCategoryId)
-    const matchesSearch = searchQuery === ''
-      ? true
-      : prompt.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prompt.content.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesFavorite = showFavoritesOnly ? prompt.is_favorited : true
-    return matchesTag && matchesCategory && matchesSearch && matchesFavorite
-  })
+  useEffect(() => {
+    let cancelled = false
+    const fetchPrompts = async () => {
+      try {
+        setLoading(true)
+        const result = await getPrompts({
+          search: debouncedSearch || undefined,
+          tag_id: selectedTagId ?? undefined,
+          category_id: selectedCategoryId ?? undefined,
+          favorites_only: showFavoritesOnly || undefined,
+          page,
+          page_size: PAGE_SIZE,
+        })
+        if (!cancelled) {
+          setPrompts(result.data)
+          setPagination(result.pagination)
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Failed to fetch prompts:', error)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    fetchPrompts()
+    return () => { cancelled = true }
+  }, [getPrompts, debouncedSearch, selectedTagId, selectedCategoryId, showFavoritesOnly, page, refreshKey])
+
+  useEffect(() => {
+    const fetchMeta = async () => {
+      try {
+        const [tagsData, categoriesData] = await Promise.all([
+          getTags(),
+          getCategories(),
+        ])
+        setTags(tagsData)
+        setCategories(categoriesData)
+      } catch (error) {
+        console.error('Failed to fetch metadata:', error)
+      }
+    }
+    fetchMeta()
+  }, [getTags, getCategories])
+
+  const handleTagSelect = useCallback((tagId: number | null) => {
+    setSelectedTagId(tagId)
+    setPage(1)
+  }, [])
+
+  const handleCategorySelect = useCallback((categoryId: number | null) => {
+    setSelectedCategoryId(categoryId)
+    setPage(1)
+  }, [])
+
+  const handleToggleFavorites = useCallback(() => {
+    setShowFavoritesOnly(prev => !prev)
+    setPage(1)
+  }, [])
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage)
+  }, [])
 
   const handleOpenCreate = () => {
     setEditingPrompt(null)
@@ -117,22 +168,19 @@ export default function Layout() {
     setEditingPrompt(null)
   }
 
-  const handleFormSuccess = () => {
-    fetchData()
-  }
-
   const handleDelete = async (id: number) => {
     try {
       await deletePrompt(id)
-      fetchData()
+      refreshPrompts()
     } catch (error) {
       console.error('Failed to delete prompt:', error)
     }
   }
 
-  const handleCardDelete = (e: React.MouseEvent, prompt: Prompt) => {
+  const handleCardDelete = (e: React.MouseEvent, id: number) => {
     e.stopPropagation()
-    setDeleteTarget(prompt)
+    const prompt = prompts.find(p => p.id === id)
+    if (prompt) setDeleteTarget(prompt)
   }
 
   const handleConfirmDelete = async () => {
@@ -142,71 +190,20 @@ export default function Layout() {
     }
   }
 
-  const handleToggleFavorite = async (e: React.MouseEvent, promptId: number) => {
+  const handleToggleFavorite = (e: React.MouseEvent, promptId: number) => {
     e.stopPropagation()
-    const prompt = prompts.find(p => p.id === promptId)
-    if (!prompt) return
-    const wasFavorited = prompt.is_favorited
-    try {
-      await toggleFavorite(promptId)
-      setPrompts(prev => prev.map(p => {
-        if (p.id === promptId) {
-          return {
-            ...p,
-            is_favorited: !wasFavorited,
-            favorite_count: wasFavorited ? p.favorite_count - 1 : p.favorite_count + 1,
-          }
-        }
-        return p
-      }))
-      addToast({
-        message: wasFavorited ? '已取消收藏' : '已收藏',
-        type: 'success',
-      })
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error)
-      addToast({ message: '收藏操作失败', type: 'error' })
-    }
+    toggleFavoriteById(promptId)
   }
 
-  const handleToggleFavoriteDetail = async (promptId: number) => {
-    const prompt = prompts.find(p => p.id === promptId)
-    if (!prompt) return
-    const wasFavorited = prompt.is_favorited
-    try {
-      await toggleFavorite(promptId)
-      setPrompts(prev => prev.map(p => {
-        if (p.id === promptId) {
-          return {
-            ...p,
-            is_favorited: !wasFavorited,
-            favorite_count: wasFavorited ? p.favorite_count - 1 : p.favorite_count + 1,
-          }
-        }
-        return p
-      }))
-      addToast({
-        message: wasFavorited ? '已取消收藏' : '已收藏',
-        type: 'success',
-      })
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error)
-      addToast({ message: '收藏操作失败', type: 'error' })
-    }
-  }
-
-  // 分类操作
   const handleCreateCategory = (parentId?: number | null) => {
     setEditingCategory(null)
     setCategoryParentId(parentId ?? null)
-    setCategoryForm({ name: '', parent_id: parentId ?? undefined })
     setCategoryDialogOpen(true)
   }
 
   const handleEditCategory = (category: Category) => {
     setEditingCategory(category)
     setCategoryParentId(category.parent_id)
-    setCategoryForm({ name: category.name, parent_id: category.parent_id ?? undefined })
     setCategoryDialogOpen(true)
   }
 
@@ -215,33 +212,15 @@ export default function Layout() {
     try {
       await deleteCategory(deleteCategoryTarget.id)
       addToast({ message: '分类已删除', type: 'success' })
-      fetchData()
+      refreshPrompts()
+      const [tagsData, categoriesData] = await Promise.all([getTags(), getCategories()])
+      setTags(tagsData)
+      setCategories(categoriesData)
     } catch (error) {
       console.error('Failed to delete category:', error)
       addToast({ message: '删除分类失败', type: 'error' })
     }
     setDeleteCategoryTarget(null)
-  }
-
-  const handleCategoryFormSubmit = async () => {
-    if (!categoryForm.name.trim()) return
-    try {
-      if (editingCategory) {
-        await updateCategory(editingCategory.id, { name: categoryForm.name.trim() })
-        addToast({ message: '分类已更新', type: 'success' })
-      } else {
-        await createCategory({
-          name: categoryForm.name.trim(),
-          parent_id: categoryParentId ?? undefined,
-        })
-        addToast({ message: '分类已创建', type: 'success' })
-      }
-      setCategoryDialogOpen(false)
-      fetchData()
-    } catch (error) {
-      console.error('Failed to save category:', error)
-      addToast({ message: '保存分类失败', type: 'error' })
-    }
   }
 
   const handleExport = async () => {
@@ -262,40 +241,21 @@ export default function Layout() {
     }
   }
 
-  const handleDownloadTemplate = async () => {
-    try {
-      const blob = await downloadImportTemplate()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'prompts_import_template.xlsx'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Failed to download template:', error)
-      addToast({ message: '下载模板失败', type: 'error' })
+  const handleOpenShare = () => {
+    const prompt = prompts.find((p) => p.id === detailPromptId)
+    if (prompt) {
+      setSharePromptId(prompt.id)
+      setSharePromptTitle(prompt.title)
+      setShareDialogOpen(true)
     }
   }
 
-  const handleImport = async () => {
-    if (!importFile) return
-    setImporting(true)
-    try {
-      const result = await importPrompts(importFile)
-      setImportDialogOpen(false)
-      setImportFile(null)
-      fetchData()
-      addToast({
-        message: `导入完成：成功 ${result.imported} 条，跳过 ${result.skipped} 条`,
-        type: 'success',
-      })
-    } catch (error) {
-      console.error('Failed to import prompts:', error)
-      addToast({ message: (error as Error).message || '导入失败', type: 'error' })
-    } finally {
-      setImporting(false)
+  const handleOpenCollaborators = () => {
+    const prompt = prompts.find((p) => p.id === detailPromptId)
+    if (prompt) {
+      setCollaboratorPromptId(prompt.id)
+      setCollaboratorPromptTitle(prompt.title)
+      setCollaboratorDialogOpen(true)
     }
   }
 
@@ -305,76 +265,40 @@ export default function Layout() {
         tags={tags}
         categories={categories}
         selectedTagId={selectedTagId}
-        onTagSelect={setSelectedTagId}
+        onTagSelect={handleTagSelect}
         selectedCategoryId={selectedCategoryId}
-        onCategorySelect={setSelectedCategoryId}
+        onCategorySelect={handleCategorySelect}
         showFavoritesOnly={showFavoritesOnly}
-        onToggleFavorites={() => setShowFavoritesOnly(prev => !prev)}
+        onToggleFavorites={handleToggleFavorites}
         onCreateCategory={handleCreateCategory}
         onEditCategory={handleEditCategory}
         onDeleteCategory={setDeleteCategoryTarget}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="p-6 border-b flex items-center gap-4 justify-between">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="搜索提示词..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button onClick={handleOpenCreate}>
-              <Plus className="h-4 w-4 mr-2" />
-              新建提示词
-            </Button>
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="h-4 w-4 mr-2" />
-              导出
-            </Button>
-            <Button variant="outline" onClick={() => { setImportFile(null); setImportDialogOpen(true) }}>
-              <Upload className="h-4 w-4 mr-2" />
-              导入
-            </Button>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span>{user?.username}</span>
-            </div>
-            <Button variant="outline" size="sm" onClick={logout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              退出登录
-            </Button>
-          </div>
-        </header>
+        <Header
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onCreateClick={handleOpenCreate}
+          onExport={handleExport}
+          onImportClick={() => setImportDialogOpen(true)}
+        />
         <div className="flex-1 overflow-auto p-6">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground">加载中...</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPrompts.map((prompt) => (
-                <div key={prompt.id} onClick={() => handleOpenDetail(prompt)}>
-                  <PromptCard prompt={prompt} onDelete={(e) => handleCardDelete(e, prompt)} onToggleFavorite={handleToggleFavorite} />
-                </div>
-              ))}
-            </div>
-          )}
-          {!loading && filteredPrompts.length === 0 && (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground">没有找到匹配的提示词</p>
-            </div>
-          )}
+          <PromptGrid
+            prompts={prompts}
+            loading={loading}
+            currentUserId={user?.id}
+            onCardClick={handleOpenDetail}
+            onDelete={handleCardDelete}
+            onToggleFavorite={handleToggleFavorite}
+            pagination={pagination}
+            onPageChange={handlePageChange}
+          />
         </div>
       </main>
       <PromptForm
         isOpen={isFormOpen}
         onClose={handleCloseForm}
-        onSuccess={handleFormSuccess}
+        onSuccess={refreshPrompts}
         tags={tags}
         categories={categories}
         prompt={editingPrompt}
@@ -384,131 +308,54 @@ export default function Layout() {
         onClose={handleCloseDetail}
         onEdit={handleOpenEditFromDetail}
         onDelete={handleDelete}
-        onToggleFavorite={handleToggleFavoriteDetail}
+        onToggleFavorite={toggleFavoriteById}
+        onShare={handleOpenShare}
+        onManageCollaborators={handleOpenCollaborators}
         promptId={detailPromptId}
         externalFavoriteState={detailPromptId ? (() => {
           const p = prompts.find((pp) => pp.id === detailPromptId)
           return p ? { is_favorited: p.is_favorited, favorite_count: p.favorite_count } : undefined
         })() : undefined}
+        currentUserId={user?.id}
       />
-
-      {/* 删除提示词确认 */}
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认删除</DialogTitle>
-            <DialogDescription>
-              确定要删除提示词「{deleteTarget?.title}」吗？此操作无法撤销。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setDeleteTarget(null)}>
-              取消
-            </Button>
-            <Button variant='destructive' onClick={handleConfirmDelete}>
-              确认删除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 分类创建/编辑对话框 */}
-      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingCategory ? '编辑分类' : '新建分类'}</DialogTitle>
-            <DialogDescription>
-              {categoryParentId ? '在当前分类下创建子分类' : editingCategory ? '修改分类名称' : '创建新的顶级分类'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="category-name">分类名称</Label>
-              <Input
-                id="category-name"
-                value={categoryForm.name}
-                onChange={(e) => setCategoryForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="请输入分类名称"
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCategoryFormSubmit() }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleCategoryFormSubmit} disabled={!categoryForm.name.trim()}>
-              {editingCategory ? '保存' : '创建'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 删除分类确认 */}
-      <Dialog open={deleteCategoryTarget !== null} onOpenChange={(open) => { if (!open) setDeleteCategoryTarget(null) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认删除分类</DialogTitle>
-            <DialogDescription>
-              确定要删除分类「{deleteCategoryTarget?.name}」吗？子分类将提升一级，该分类下的提示词将移至上级分类。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setDeleteCategoryTarget(null)}>
-              取消
-            </Button>
-            <Button variant='destructive' onClick={handleDeleteCategoryConfirm}>
-              确认删除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 导入提示词对话框 */}
-      <Dialog open={importDialogOpen} onOpenChange={(open) => { if (!open) setImportDialogOpen(false) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>批量导入提示词</DialogTitle>
-            <DialogDescription>
-              请选择之前导出的 Excel 文件，系统将自动导入其中的提示词。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>没有模板？</span>
-              <button
-                onClick={handleDownloadTemplate}
-                className="text-primary hover:underline cursor-pointer"
-              >
-                下载导入模板
-              </button>
-              <span>（含填写说明和示例）</span>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="import-file">选择文件</Label>
-              <Input
-                id="import-file"
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-              />
-              {importFile && (
-                <p className="text-sm text-muted-foreground">
-                  已选择：{importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
-                </p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleImport} disabled={!importFile || importing}>
-              {importing ? '导入中...' : '确认导入'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeletePromptDialog
+        target={deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        onConfirm={handleConfirmDelete}
+      />
+      <CategoryDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        editingCategory={editingCategory}
+        parentId={categoryParentId}
+        onSuccess={() => {
+          refreshPrompts()
+          getCategories().then(setCategories).catch(console.error)
+        }}
+      />
+      <DeleteCategoryDialog
+        target={deleteCategoryTarget}
+        onOpenChange={(open) => { if (!open) setDeleteCategoryTarget(null) }}
+        onConfirm={handleDeleteCategoryConfirm}
+      />
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onSuccess={refreshPrompts}
+      />
+      <ShareDialog
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        promptId={sharePromptId}
+        promptTitle={sharePromptTitle}
+      />
+      <CollaboratorDialog
+        isOpen={collaboratorDialogOpen}
+        onClose={() => setCollaboratorDialogOpen(false)}
+        promptId={collaboratorPromptId}
+        promptTitle={collaboratorPromptTitle}
+        isOwner={collaboratorPromptId ? prompts.find(p => p.id === collaboratorPromptId)?.user_id === user?.id : false}
+      />
     </div>
   )
 }

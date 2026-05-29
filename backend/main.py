@@ -6,9 +6,11 @@ from sqlalchemy import asc, desc, or_, func as sa_func
 from typing import List, Optional
 from io import BytesIO
 from openpyxl import Workbook, load_workbook
+from datetime import timedelta
+from passlib.context import CryptContext
 
 from .database import get_db, engine, Base
-from .models import Prompt, Tag, PromptVersion, User, Favorite, Category, prompt_tag_association, prompt_category_association
+from .models import Prompt, Tag, PromptVersion, User, Favorite, Category, SharedLink, PromptCollaborator, prompt_tag_association, prompt_category_association
 from .schemas import (
     PromptCreate,
     PromptUpdate,
@@ -22,16 +24,32 @@ from .schemas import (
     LoginRequest,
     UserResponse,
     Token,
+    RefreshRequest,
+    PasswordResetRequest,
+    PasswordReset,
     FavoriteResponse,
+    SharedLinkCreate,
+    SharedLinkResponse,
+    SharedPromptResponse,
+    SharedLinkAccess,
+    CollaboratorAdd,
+    CollaboratorUpdate,
+    CollaboratorResponse,
 )
 from .auth import (
     verify_password,
     get_password_hash,
     create_access_token,
+    create_refresh_token,
+    verify_refresh_token,
+    create_reset_token,
+    verify_reset_token,
     get_current_user,
 )
 
 Base.metadata.create_all(bind=engine)
+
+share_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI(
     title="PromptHub API",
@@ -50,9 +68,19 @@ app.add_middleware(
 
 
 def attach_favorite_info(prompt: Prompt, user_id: int, db: Session):
-    """为 prompt 对象附加 favorite_count 和 is_favorited 信息"""
     prompt.favorite_count = db.query(sa_func.count(Favorite.id)).filter(Favorite.prompt_id == prompt.id).scalar() or 0
     prompt.is_favorited = db.query(Favorite).filter(Favorite.prompt_id == prompt.id, Favorite.user_id == user_id).first() is not None
+
+
+def attach_collaborator_role(prompt: Prompt, user_id: int, db: Session):
+    if prompt.user_id == user_id:
+        prompt.collaborator_role = "owner"
+    else:
+        collab = db.query(PromptCollaborator).filter(
+            PromptCollaborator.prompt_id == prompt.id,
+            PromptCollaborator.user_id == user_id,
+        ).first()
+        prompt.collaborator_role = collab.role if collab else None
 
 
 def build_category_tree(categories: List[Category]) -> List[Category]:
@@ -98,12 +126,49 @@ def login(user_data: LoginRequest, db: Session = Depends(get_db)):
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=access_token, token_type="bearer")
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
+
+
+@app.post("/api/auth/refresh", response_model=Token)
+def refresh_token(request: RefreshRequest, db: Session = Depends(get_db)):
+    user_id = verify_refresh_token(request.refresh_token)
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在",
+        )
+    new_access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    return Token(access_token=new_access_token, refresh_token=new_refresh_token, token_type="bearer")
 
 
 @app.get("/api/auth/me", response_model=UserResponse)
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@app.post("/api/auth/password-reset-request")
+def request_password_reset(request_data: PasswordResetRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == request_data.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="该邮箱未注册")
+
+    reset_token = create_reset_token(data={"sub": str(user.id)})
+    return {"reset_token": reset_token, "message": "重置令牌已生成"}
+
+
+@app.post("/api/auth/password-reset")
+def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db)):
+    user_id = verify_reset_token(reset_data.token)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user.hashed_password = get_password_hash(reset_data.new_password)
+    db.commit()
+    return {"message": "密码重置成功"}
 
 
 @app.post("/api/prompts", response_model=PromptResponse)
@@ -149,6 +214,7 @@ def create_prompt(
     db.commit()
     db.refresh(db_prompt)
     attach_favorite_info(db_prompt, current_user.id, db)
+    attach_collaborator_role(db_prompt, current_user.id, db)
     return db_prompt
 
 
@@ -169,7 +235,11 @@ def list_prompts(
     current_user: User = Depends(get_current_user),
 ):
     query = db.query(Prompt).filter(
-        or_(Prompt.user_id == current_user.id, Prompt.is_public == True)
+        or_(
+            Prompt.user_id == current_user.id,
+            Prompt.is_public == True,
+            Prompt.id.in_(db.query(PromptCollaborator.prompt_id).filter(PromptCollaborator.user_id == current_user.id)),
+        )
     )
 
     if search:
@@ -197,7 +267,7 @@ def list_prompts(
         )
 
     if favorites_only:
-        favorited_prompt_ids = db.query(Favorite.prompt_id).filter(Favorite.user_id == current_user.id).subquery()
+        favorited_prompt_ids = db.query(Favorite.prompt_id).filter(Favorite.user_id == current_user.id)
         query = query.filter(Prompt.id.in_(favorited_prompt_ids))
 
     sort_columns = {
@@ -245,6 +315,7 @@ def list_prompts(
     prompts = query.all()
     for p in prompts:
         attach_favorite_info(p, current_user.id, db)
+        attach_collaborator_role(p, current_user.id, db)
     return prompts
 
 
@@ -475,9 +546,15 @@ def get_prompt(
     prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
     if not prompt:
         raise HTTPException(status_code=404, detail="提示词未找到")
-    if prompt.user_id != current_user.id and not prompt.is_public:
+    is_owner = prompt.user_id == current_user.id
+    is_collaborator = db.query(PromptCollaborator).filter(
+        PromptCollaborator.prompt_id == prompt_id,
+        PromptCollaborator.user_id == current_user.id,
+    ).first() is not None
+    if not is_owner and not prompt.is_public and not is_collaborator:
         raise HTTPException(status_code=403, detail="无权访问该提示词")
     attach_favorite_info(prompt, current_user.id, db)
+    attach_collaborator_role(prompt, current_user.id, db)
     return prompt
 
 
@@ -491,7 +568,13 @@ def update_prompt(
     prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
     if not prompt:
         raise HTTPException(status_code=404, detail="提示词未找到")
-    if prompt.user_id != current_user.id:
+    is_owner = prompt.user_id == current_user.id
+    collab = db.query(PromptCollaborator).filter(
+        PromptCollaborator.prompt_id == prompt_id,
+        PromptCollaborator.user_id == current_user.id,
+    ).first()
+    is_editor = collab and collab.role == "editor"
+    if not is_owner and not is_editor:
         raise HTTPException(status_code=403, detail="无权修改该提示词")
 
     update_dict = prompt_data.model_dump(exclude_unset=True)
@@ -543,6 +626,7 @@ def update_prompt(
     db.commit()
     db.refresh(prompt)
     attach_favorite_info(prompt, current_user.id, db)
+    attach_collaborator_role(prompt, current_user.id, db)
     return prompt
 
 
@@ -604,13 +688,47 @@ def list_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    categories = db.query(Category).filter(
+    # 1. 当前用户自己的分类 + 公共分类
+    own_categories = db.query(Category).filter(
         or_(Category.user_id == current_user.id, Category.user_id == None)
-    ).order_by(Category.sort_order, Category.name).all()
+    ).all()
+
+    # 2. 公开提示词中引用的、属于其他用户的分类（外部分类）
+    visible_prompt_ids = db.query(Prompt.id).filter(
+        or_(Prompt.user_id == current_user.id, Prompt.is_public == True)
+    ).subquery()
+    foreign_cat_ids = db.query(prompt_category_association.c.category_id).filter(
+        prompt_category_association.c.prompt_id.in_(visible_prompt_ids)
+    ).distinct().all()
+    foreign_cat_ids_set = {r[0] for r in foreign_cat_ids}
+
+    if foreign_cat_ids_set:
+        foreign_categories = db.query(Category).filter(
+            Category.id.in_(foreign_cat_ids_set),
+            Category.user_id != None,
+            Category.user_id != current_user.id,
+        ).all()
+        # 标记为外部分类，附加 owner_username
+        for fc in foreign_categories:
+            fc.is_foreign = True
+            owner = db.query(User).filter(User.id == fc.user_id).first()
+            fc.owner_username = owner.username if owner else None
+    else:
+        foreign_categories = []
+
+    # 合并去重
+    own_ids = {c.id for c in own_categories}
+    all_categories = list(own_categories)
+    for fc in foreign_categories:
+        if fc.id not in own_ids:
+            all_categories.append(fc)
+
+    all_categories.sort(key=lambda c: (c.sort_order, c.name))
+
     # 清空 children 避免重复，手动构建树
-    for c in categories:
+    for c in all_categories:
         c.children = []
-    tree = build_category_tree(categories)
+    tree = build_category_tree(all_categories)
     return tree
 
 
@@ -697,4 +815,253 @@ def delete_category(
     db.delete(category)
     db.commit()
     return {"message": "删除成功"}
+
+
+# ============ 分享链接 API ============
+
+@app.post("/api/prompts/{prompt_id}/shares", response_model=SharedLinkResponse, status_code=status.HTTP_201_CREATED)
+def create_share_link(
+    prompt_id: int,
+    share_data: SharedLinkCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅所有者可创建分享链接")
+
+    hashed_password = None
+    if share_data.password:
+        hashed_password = share_pwd_ctx.hash(share_data.password)
+
+    expires_at = None
+    if share_data.expires_hours:
+        from datetime import datetime as dt
+        expires_at = dt.utcnow() + timedelta(hours=share_data.expires_hours)
+
+    shared_link = SharedLink(
+        prompt_id=prompt_id,
+        token=SharedLink.generate_token(),
+        password=hashed_password,
+        expires_at=expires_at,
+        created_by=current_user.id,
+    )
+    db.add(shared_link)
+    db.commit()
+    db.refresh(shared_link)
+    shared_link.has_password = bool(hashed_password)
+    return shared_link
+
+
+@app.get("/api/prompts/{prompt_id}/shares", response_model=List[SharedLinkResponse])
+def list_share_links(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅所有者可查看分享链接")
+
+    links = db.query(SharedLink).filter(SharedLink.prompt_id == prompt_id).all()
+    for link in links:
+        link.has_password = bool(link.password)
+    return links
+
+
+@app.delete("/api/prompts/{prompt_id}/shares/{share_id}")
+def delete_share_link(
+    prompt_id: int,
+    share_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    link = db.query(SharedLink).filter(SharedLink.id == share_id, SharedLink.prompt_id == prompt_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="分享链接未找到")
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt or prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅所有者可删除分享链接")
+
+    db.delete(link)
+    db.commit()
+    return {"message": "分享链接已删除"}
+
+
+@app.get("/api/shared/{token}", response_model=SharedPromptResponse)
+def access_shared_prompt(
+    token: str,
+    password: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    link = db.query(SharedLink).filter(SharedLink.token == token).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="分享链接无效")
+
+    from datetime import datetime as dt
+    if link.expires_at and link.expires_at < dt.utcnow():
+        raise HTTPException(status_code=410, detail="分享链接已过期")
+
+    if link.password:
+        if not password or not share_pwd_ctx.verify(password, link.password):
+            raise HTTPException(status_code=403, detail="访问密码错误")
+
+    prompt = db.query(Prompt).filter(Prompt.id == link.prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+
+    return SharedPromptResponse(
+        title=prompt.title,
+        scenario=prompt.scenario,
+        content=prompt.content,
+        variables=prompt.variables,
+        owner_username=prompt.owner_username,
+        categories=[CategoryResponse.model_validate(c, from_attributes=True) for c in prompt.categories],
+        tags=[TagResponse.model_validate(t, from_attributes=True) for t in prompt.tags],
+    )
+
+
+# ============ 协作者 API ============
+
+@app.post("/api/prompts/{prompt_id}/collaborators", response_model=CollaboratorResponse, status_code=status.HTTP_201_CREATED)
+def add_collaborator(
+    prompt_id: int,
+    collab_data: CollaboratorAdd,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅所有者可添加协作者")
+
+    if collab_data.role not in ("viewer", "editor"):
+        raise HTTPException(status_code=400, detail="角色必须是 viewer 或 editor")
+
+    target_user = db.query(User).filter(User.id == collab_data.user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="用户未找到")
+
+    if target_user.id == prompt.user_id:
+        raise HTTPException(status_code=400, detail="不能将所有者添加为协作者")
+
+    existing = db.query(PromptCollaborator).filter(
+        PromptCollaborator.prompt_id == prompt_id,
+        PromptCollaborator.user_id == collab_data.user_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="该用户已是协作者")
+
+    collaborator = PromptCollaborator(
+        prompt_id=prompt_id,
+        user_id=collab_data.user_id,
+        role=collab_data.role,
+    )
+    db.add(collaborator)
+    db.commit()
+    db.refresh(collaborator)
+    collaborator.username = target_user.username
+    return collaborator
+
+
+@app.get("/api/prompts/{prompt_id}/collaborators", response_model=List[CollaboratorResponse])
+def list_collaborators(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        is_collab = db.query(PromptCollaborator).filter(
+            PromptCollaborator.prompt_id == prompt_id,
+            PromptCollaborator.user_id == current_user.id,
+        ).first()
+        if not is_collab:
+            raise HTTPException(status_code=403, detail="无权查看协作者列表")
+
+    collaborators = db.query(PromptCollaborator).filter(PromptCollaborator.prompt_id == prompt_id).all()
+    for c in collaborators:
+        c.username = c.user.username if c.user else None
+    return collaborators
+
+
+@app.put("/api/prompts/{prompt_id}/collaborators/{user_id}", response_model=CollaboratorResponse)
+def update_collaborator(
+    prompt_id: int,
+    user_id: int,
+    collab_data: CollaboratorUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+    if prompt.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅所有者可修改协作者角色")
+
+    if collab_data.role not in ("viewer", "editor"):
+        raise HTTPException(status_code=400, detail="角色必须是 viewer 或 editor")
+
+    collaborator = db.query(PromptCollaborator).filter(
+        PromptCollaborator.prompt_id == prompt_id,
+        PromptCollaborator.user_id == user_id,
+    ).first()
+    if not collaborator:
+        raise HTTPException(status_code=404, detail="协作者未找到")
+
+    collaborator.role = collab_data.role
+    db.commit()
+    db.refresh(collaborator)
+    collaborator.username = collaborator.user.username if collaborator.user else None
+    return collaborator
+
+
+@app.delete("/api/prompts/{prompt_id}/collaborators/{user_id}")
+def remove_collaborator(
+    prompt_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="提示词未找到")
+    is_owner = prompt.user_id == current_user.id
+    is_self = user_id == current_user.id
+    if not is_owner and not is_self:
+        raise HTTPException(status_code=403, detail="无权移除协作者")
+
+    collaborator = db.query(PromptCollaborator).filter(
+        PromptCollaborator.prompt_id == prompt_id,
+        PromptCollaborator.user_id == user_id,
+    ).first()
+    if not collaborator:
+        raise HTTPException(status_code=404, detail="协作者未找到")
+
+    db.delete(collaborator)
+    db.commit()
+    return {"message": "协作者已移除"}
+
+
+@app.get("/api/users/search", response_model=List[UserResponse])
+def search_users(
+    q: str = Query(..., min_length=1, description="搜索关键词"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    users = db.query(User).filter(
+        or_(
+            User.username.ilike(f"%{q}%"),
+            User.email.ilike(f"%{q}%"),
+        ),
+        User.id != current_user.id,
+    ).limit(10).all()
+    return users
 

@@ -1,0 +1,90 @@
+{
+  "version": "1.0.0",
+  "description": "PromptHub 项目上下文配置 - 为智能体提供项目特定的上下文信息",
+  "project": {
+    "name": "PromptHub",
+    "description": "AI 提示词资产管理库 - 用于管理和共享 AI 提示词的全栈 Web 应用",
+    "repository": "PromptHub",
+    "language": "zh-CN"
+  },
+  "tech_stack": {
+    "backend": {
+      "language": "Python 3.12+",
+      "framework": "FastAPI 0.104+",
+      "orm": "SQLAlchemy 2.0",
+      "validation": "Pydantic v2",
+      "database": "SQLite",
+      "auth": "JWT (python-jose, HS256) + bcrypt (passlib)",
+      "server": "Uvicorn"
+    },
+    "frontend": {
+      "language": "TypeScript",
+      "framework": "React 18",
+      "build_tool": "Vite 5",
+      "routing": "React Router DOM v7",
+      "styling": "Tailwind CSS 3 + tailwindcss-animate",
+      "ui_components": "Radix UI + shadcn/ui",
+      "icons": "Lucide React",
+      "state_management": "React Context",
+      "http_client": "原生 fetch API",
+      "testing": "Vitest + Testing Library + jsdom"
+    },
+    "deployment": {
+      "containerization": "Docker + Docker Compose",
+      "ci_cd": "GitHub Actions",
+      "frontend_server": "Nginx",
+      "node_version": "20.x"
+    }
+  },
+  "file_conventions": {
+    "backend_routes": "backend/main.py",
+    "backend_models": "backend/models.py",
+    "backend_schemas": "backend/schemas.py",
+    "backend_auth": "backend/auth.py",
+    "backend_database": "backend/database.py",
+    "frontend_api": "frontend/src/api.ts",
+    "frontend_app": "frontend/src/App.tsx",
+    "frontend_layout": "frontend/src/components/Layout.tsx",
+    "frontend_sidebar": "frontend/src/components/Sidebar.tsx",
+    "frontend_auth_context": "frontend/src/contexts/AuthContext.tsx",
+    "frontend_use_api": "frontend/src/hooks/useApi.ts",
+    "frontend_ui_components": "frontend/src/components/ui/",
+    "frontend_pages": "frontend/src/pages/",
+    "backend_tests": "tests/",
+    "frontend_tests": "frontend/src/test/"
+  },
+  "commands": {
+    "backend_lint": "ruff check backend/",
+    "backend_format": "ruff format backend/",
+    "backend_test": "pytest",
+    "backend_dev": "uvicorn backend.main:app --reload",
+    "frontend_lint": "cd frontend && npm run lint",
+    "frontend_build": "cd frontend && npm run build",
+    "frontend_test": "cd frontend && npm run test",
+    "frontend_dev": "cd frontend && npm run dev",
+    "docker_up": "docker compose up -d",
+    "docker_build": "docker compose build"
+  },
+  "coding_rules": {
+    "backend": {
+      "pydantic_version": "v2",
+      "orm_style": "Mapped/mapped_column",
+      "error_language": "中文",
+      "comments": "不添加冗余注释",
+      "naming": "snake_case for functions/variables, PascalCase for Pydantic models"
+    },
+    "frontend": {
+      "component_style": "函数式组件 + Hooks",
+      "styling": "Tailwind CSS + cn()",
+      "path_alias": "@ → src/",
+      "comments": "不添加冗余注释",
+      "naming": "PascalCase for components, camelCase for functions/variables"
+    }
+  },
+  "integration": {
+    "trae_skill_config": ".trae/skill-config.json",
+    "trae_rules": ".trae/rules/project_rules.md",
+    "claude_commands": ".claude/commands/",
+    "claude_md": "CLAUDE.md"
+  }
+}
